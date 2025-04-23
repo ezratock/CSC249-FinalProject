@@ -1,7 +1,8 @@
 .idea
 CSC249-machine-vision.iml
 Project Guidelines.pdf
-dataset
+data
 secrets
 .DS_Store
 bop_dataset
+venv
