@@ -9,7 +9,7 @@ BOP_ROOT = Path("bop_dataset")
 TEST_SCENES = BOP_ROOT / "test"
 DEST_ROOT = Path("data") / "cropped_objs"
 
-# flat gray occlusion fill best for SIFT to avoid hallucinating features but retaining object shape
+# gray occlusion fill best for SIFT to avoid hallucinating features but retaining object shape?
 GRAY = [128, 128, 128]
 
 def crop_and_save(rgb_img, mask, save_path):
