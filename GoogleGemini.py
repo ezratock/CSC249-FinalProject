@@ -11,20 +11,18 @@ DATA_PATH = "dataset/test/"
 OUTPUT_PATH = "output/gemini_results.csv"
 PROMPT = "How many cars are in this image? Respond with ONLY the number as digits."
 
-
-# === Step 1: Load API Key ===
+# step 1: set up model
 with open("secrets/gemini-api.txt", "r") as f:
     api_key = f.read().strip()
 genai.configure(api_key=api_key)
 
-# === Step 2: Set up model ===
 model = genai.GenerativeModel(model_name=MODEL)
 
-# === Step 3: Loop through test images ===
+# step 2: loop through test images
 image_dir = Path(DATA_PATH)
 results = []
 
-# === Step 4: Process each image with rate limiting (max 15 RPM) ===
+# step 3: process each image with rate limiting
 image_files = sorted(image_dir.glob("*.jpg"))
 
 for image_file in image_files[:5]:
@@ -59,10 +57,10 @@ for image_file in image_files[:5]:
     else:
         print(f"{image_file.name[:19]}: \n{error}")
 
-    # Respect rate limit
+    # respect rate limit
     time.sleep(60/RPM)
 
-# === Step 5: Save results to CSV ===
+# step 4: Save results to CSV
 with open(OUTPUT_PATH, "w", newline="") as csvfile:
     fieldnames = ["image", "gemini_response", "error", "parsed_car_count"]
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
