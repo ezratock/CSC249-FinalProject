@@ -9,7 +9,7 @@ from tqdm import tqdm
 RESULTS_FILE = Path("output/results.json")
 CROPPED_DIR = Path("data/objects/hybrid_crop")
 SCENE_DIR = Path("bop_dataset/test")
-OUTPUT_FILE = Path("data/results.json")
+OUTPUT_FILE = Path("output/cv_results.json")
 THRESHOLD_INLIERS = 10  # number of inliers needed to predict object presence
 RANSAC_THRESHOLD = 5    # pixel threshold for inlier check
 MAX_ITERATIONS = 1000   # max iterations for RANSAC
