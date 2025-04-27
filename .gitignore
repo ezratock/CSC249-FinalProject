@@ -6,3 +6,4 @@ secrets
 .DS_Store
 bop_dataset
 venv
+GoogleGeminiStartAt.py
