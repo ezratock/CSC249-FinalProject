@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import List, Tuple
 from PIL import Image
 from tqdm import tqdm
+from sklearn.metrics import precision_recall_fscore_support
 
 
 class ResNet18Encoder(nn.Module):
@@ -156,54 +157,159 @@ class SceneObjectDataset(Dataset):
         return crop_tensors[0], crop_tensors[1], crop_tensors[2], scene_tensor, torch.tensor(label, dtype=torch.float32)
 
 
+# def load_and_split_dataset(
+#         results_path: str = "output/results.json",
+#         heldout_scenes: List[str] = ["000052", "000054"],  # scenes reserved fully for validation
+#         train_ratio: float = 0.9,
+#         seed: int = 42
+# ) -> Tuple[List[Tuple[str, str, str, int]], List[Tuple[str, str, str, int]]]:
+#     """
+#     Loads results.json and returns two lists of samples:
+#     (scene_num, frame_num, object_name, true_label)
+#     """
+#
+#     with open(results_path, "r") as f:
+#         data = json.load(f)
+#
+#     all_scenes = sorted(data.keys())
+#     main_scenes = [s for s in all_scenes if s not in heldout_scenes]
+#
+#     random.seed(seed)
+#     train_samples = []
+#     val_samples = []
+#
+#     for scene in main_scenes:
+#         frame_dict = data[scene]
+#         frames = sorted(frame_dict.keys())
+#         random.shuffle(frames)
+#
+#         num_train = int(len(frames) * train_ratio)
+#         train_frames = frames[:num_train]
+#         val_frames = frames[num_train:]
+#
+#         # add 90% of main scenes to training
+#         for frame in train_frames:
+#             for obj_data in frame_dict[frame]:
+#                 train_samples.append((scene, frame, obj_data["object"], obj_data["true_label"]))
+#
+#         # add remaining 10% of main scenes to validation
+#         for frame in val_frames:
+#             for obj_data in frame_dict[frame]:
+#                 val_samples.append((scene, frame, obj_data["object"], obj_data["true_label"]))
+#
+#     # add 100% of held out scenes to validation
+#     for scene in heldout_scenes:
+#         frame_dict = data[scene]
+#         for frame in frame_dict:
+#             for obj_data in frame_dict[frame]:
+#                 val_samples.append((scene, frame, obj_data["object"], obj_data["true_label"]))
+#
+#     return train_samples, val_samples
+
 def load_and_split_dataset(
         results_path: str = "output/results.json",
-        heldout_scenes: List[str] = ["000052", "000054"],  # scenes reserved fully for validation
-        train_ratio: float = 0.9,
         seed: int = 42
-) -> Tuple[List[Tuple[str, str, str, int]], List[Tuple[str, str, str, int]]]:
-    """
-    Loads results.json and returns two lists of samples:
-    (scene_num, frame_num, object_name, true_label)
-    """
-
+) -> Tuple[List[Tuple[str, str, str, int]],
+           List[Tuple[str, str, str, int]],
+           List[Tuple[str, str, str, int]],
+           List[Tuple[str, str, str, int]],
+           List[Tuple[str, str, str, int]]]:
     with open(results_path, "r") as f:
         data = json.load(f)
 
     all_scenes = sorted(data.keys())
-    main_scenes = [s for s in all_scenes if s not in heldout_scenes]
+    scene_val_unseen = "000056"
+    scene_test_unseen = "000054"
+    main_scenes = [s for s in all_scenes if s not in [scene_val_unseen, scene_test_unseen]]
 
     random.seed(seed)
-    train_samples = []
-    val_samples = []
+
+    train = []
+    val_seen = []
+    val_unseen = []
+    test_seen = []
+    test_unseen = []
 
     for scene in main_scenes:
-        frame_dict = data[scene]
-        frames = sorted(frame_dict.keys())
-        random.shuffle(frames)
+        positive_samples = []
+        negative_samples = []
+        for frame, objs in data[scene].items():
+            for obj in objs:
+                sample = (scene, frame, obj["object"], obj["true_label"])
+                if obj["true_label"] == 1:
+                    positive_samples.append(sample)
+                else:
+                    negative_samples.append(sample)
 
-        num_train = int(len(frames) * train_ratio)
-        train_frames = frames[:num_train]
-        val_frames = frames[num_train:]
+        assert len(positive_samples) == len(negative_samples), f"unequal number of positive and negatives samples in scene {scene}"
+        random.shuffle(positive_samples)
+        random.shuffle(negative_samples)
+        n = len(positive_samples)
+        n_train = int(n * 0.8)
+        n_val = int(n * 0.1)
 
-        # add 90% of main scenes to training
-        for frame in train_frames:
-            for obj_data in frame_dict[frame]:
-                train_samples.append((scene, frame, obj_data["object"], obj_data["true_label"]))
+        train += positive_samples[:n_train]
+        train += negative_samples[:n_train]
+        val_seen += positive_samples[n_train:n_train+n_val]
+        val_seen += negative_samples[n_train:n_train+n_val]
+        test_seen += positive_samples[n_train+n_val:]
+        test_seen += negative_samples[n_train+n_val:]
 
-        # add remaining 10% of main scenes to validation
-        for frame in val_frames:
-            for obj_data in frame_dict[frame]:
-                val_samples.append((scene, frame, obj_data["object"], obj_data["true_label"]))
+    random.shuffle(train)
+    random.shuffle(val_seen)
+    random.shuffle(test_seen)
 
-    # add 100% of held out scenes to validation
-    for scene in heldout_scenes:
-        frame_dict = data[scene]
-        for frame in frame_dict:
-            for obj_data in frame_dict[frame]:
-                val_samples.append((scene, frame, obj_data["object"], obj_data["true_label"]))
+    for frame, objs in data[scene_val_unseen].items():
+        for obj in objs:
+            val_unseen.append((scene_val_unseen, frame, obj["object"], obj["true_label"]))
+    for frame, objs in data[scene_test_unseen].items():
+        for obj in objs:
+            test_unseen.append((scene_val_unseen, frame, obj["object"], obj["true_label"]))
 
-    return train_samples, val_samples
+    return train, val_seen, val_unseen, test_seen, test_unseen
+
+def evaluate_model(model, dataloader, criterion, device, desc="Eval", is_print = False):
+    model.eval()
+    total_loss = 0.0
+    total_correct = 0
+    total_samples = 0
+
+    all_preds = []
+    all_labels = []
+
+    with torch.no_grad():
+        loop = tqdm(dataloader, desc=desc, leave=True)
+        for crop1, crop2, crop3, scene, label in loop:
+            crop1 = crop1.to(device)
+            crop2 = crop2.to(device)
+            crop3 = crop3.to(device)
+            scene = scene.to(device)
+            label = label.float().unsqueeze(1).to(device)
+
+            output = model(crop1, crop2, crop3, scene)
+            loss = criterion(output, label)
+
+            total_loss += loss.item() * crop1.size(0)
+
+            preds = (output > 0.5).float()
+            total_correct += (preds == label).sum().item()
+            total_samples += label.size(0)
+
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(label.cpu().numpy())
+
+    avg_loss = total_loss / total_samples
+    accuracy = total_correct / total_samples
+
+    precision, recall, f1, _ = precision_recall_fscore_support(
+        all_labels, all_preds, average='binary', zero_division=0
+    )
+
+    if is_print:
+        print(f"{desc} | Loss: {avg_loss:.4f} | Acc: {accuracy:.4f} | "
+          f"Precision: {precision:.4f} | Recall: {recall:.4f} | F1: {f1:.4f}")
+
+    return avg_loss, accuracy, precision, recall, f1
 
 def train_model(
         model, train_loader, val_loader, num_epochs=20, freeze_epochs=5,
@@ -247,36 +353,14 @@ def train_model(
 
         avg_train_loss = running_loss / len(train_loader.dataset)
 
-        # validation
-        model.eval()
-        val_loss = 0.0
-        correct = 0
-        total = 0
-
-        with torch.no_grad():
-            val_loop = tqdm(val_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Val]", leave=True)
-            for crop1, crop2, crop3, scene, label in val_loop:
-                crop1 = crop1.to(device)
-                crop2 = crop2.to(device)
-                crop3 = crop3.to(device)
-                scene = scene.to(device)
-                label = label.float().unsqueeze(1).to(device)
-
-                output = model(crop1, crop2, crop3, scene)
-                loss = criterion(output, label)
-                val_loss += loss.item() * crop1.size(0)
-
-                preds = (output > 0.5).float()
-                correct += (preds == label).sum().item()
-                total += label.size(0)
-
-        avg_val_loss = val_loss / len(val_loader.dataset)
-        val_acc = correct / total
+        val_loss, val_acc, val_prec, val_rec, val_f1 = evaluate_model(model, val_loader, criterion, device)
 
         print(f"Epoch {epoch+1}/{num_epochs} | "
               f"Train Loss: {avg_train_loss:.4f} | "
-              f"Val Loss: {avg_val_loss:.4f} | "
-              f"Val Acc: {val_acc:.4f}")
+              f"Val Loss: {val_loss:.4f} | "
+              f"Val Acc: {val_acc:.4f} | "
+              f"Precision: {val_prec:.4f} | Recall: {val_rec:.4f} | F1: {val_f1:.4f}) "
+              )
 
     return model
 
@@ -321,19 +405,14 @@ def testFullModel():
     print("testFullMode() passed")
 
 def testDatasetPrep():
-    train_data, val_data = load_and_split_dataset()
-    # print(f"Train samples: {len(train_data)}")
-    # print(f"Validation samples: {len(val_data)}")
+    train, val_seen, val_unseen, test_seen, test_unseen = load_and_split_dataset()
+    for name, value in {"train": train, "val_seen": val_seen, "val_unseen": val_unseen, "test_seen": test_seen, "test_unseen": test_unseen}.items():
+        positive = [t for t in value if t[3] == 1]
+        negative = [t for t in value if t[3] == 0]
+        assert len(positive) == len(negative)
+        print(f"{name} samples: {len(value)} | positive: {len(positive)} | negative: {len(negative)}")
 
-    # 10 samples
-    # for sample in train_data[:10]:
-    #     print("Train sample:", sample)
-    #
-    # for sample in val_data[:10]:
-    #     print("Validation sample:", sample)
-
-    # small batch from the training set
-    train_dataset = SceneObjectDataset(train_data)
+    train_dataset = SceneObjectDataset(train)
     train_loader = DataLoader(train_dataset, batch_size=2, shuffle=True)
 
     # single batch
@@ -370,7 +449,7 @@ if __name__ == "__main__":
     # testEncoder()
     # testCropFusion()
     # testSceneComparison()
-    # testDatasetPrep()
+    testDatasetPrep()
     # testFullModel()
 
-    main()
+    # main()
