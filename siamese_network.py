@@ -229,7 +229,7 @@ def train_model(
         model.train()
         running_loss = 0.0
 
-        train_loop = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Train]", leave=False)
+        train_loop = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Train]", leave=True)
         for crop1, crop2, crop3, scene, label in train_loop:
             crop1 = crop1.to(device)
             crop2 = crop2.to(device)
@@ -254,7 +254,7 @@ def train_model(
         total = 0
 
         with torch.no_grad():
-            val_loop = tqdm(val_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Val]", leave=False)
+            val_loop = tqdm(val_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Val]", leave=True)
             for crop1, crop2, crop3, scene, label in val_loop:
                 crop1 = crop1.to(device)
                 crop2 = crop2.to(device)
@@ -364,7 +364,7 @@ def main():
     # train
     model = SiameseNetwork()
     trained_model = train_model(model, train_loader, val_loader, num_epochs=20)
-    torch.save(trained_model.state_dict(), 'output/siamese_scene_model.pth')
+    torch.save(trained_model.state_dict(), 'output/siamese_network.pth')
 
 if __name__ == "__main__":
     # testEncoder()

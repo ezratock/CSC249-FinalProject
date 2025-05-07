@@ -7,3 +7,4 @@ secrets
 bop_dataset
 venv
 GoogleGeminiStartAt.py
+*.pth
