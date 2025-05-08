@@ -1,17 +1,28 @@
 import torch
 from torch.utils.data import DataLoader, Dataset
 
-from siamese_network import ResNet18Encoder, CropFusionMLP, SceneComparisonMLP, SiameseNetwork
+from siamese_network import SiameseNetwork
+from embed_processing_modules import CropFusionMLP, SceneComparisonMLP
 from dataset import SceneObjectDataset, load_and_split_dataset
+from encoders import ResNet18Encoder, ViTEncoder
 
+WD="."
 
-def testEncoder():
+def testResNet18Encoder():
     model = ResNet18Encoder(freeze=True)
     dummy_image = torch.randn(1, 3, 224, 224)
     output = model(dummy_image)
     assert output.shape == torch.Size([1, 512])
-    print("testEncoder() passed")
+    print("testResNet18Encoder() passed")
 
+def testViTEncoder():
+    model = ViTEncoder(freeze=True)
+    dummy_image = torch.randn(1, 3, 224, 224)
+    output = model(dummy_image, use_jpm=False)
+    assert output.shape == torch.Size([1, 384])
+    output = model(dummy_image, use_jpm=True)
+    assert output.shape == torch.Size([1, 384*3])
+    print("testViTEncoder() passed")
 
 def testCropFusion():
     model = CropFusionMLP()
@@ -33,30 +44,41 @@ def testSceneComparison():
     print("testSceneComparison() passed")
 
 
-def testFullModel():
-    model = SiameseNetwork(ResNet18Encoder(freeze=True), CropFusionMLP(), SceneComparisonMLP())
+def testFullModelHelper(model, B):
     model.eval()
-
-    B, C, height, width = 5, 3, 224, 224
+    C, height, width = 3, 224, 224
     crop_1 = torch.rand(B, C, height, width)
     crop_2 = torch.rand(B, C, height, width)
     crop_3 = torch.rand(B, C, height, width)
     scene = torch.rand(B, C, height, width)
+    return model(crop_1, crop_2, crop_3, scene)
 
-    output = model(crop_1, crop_2, crop_3, scene)
+
+def testResNet18FullModel():
+    model = SiameseNetwork(ResNet18Encoder(freeze=True), CropFusionMLP(), SceneComparisonMLP())
+    B=5
+    output = testFullModelHelper(model, B)
     assert output.shape == torch.Size([B, 1])
-    print("testFullMode() passed")
+    print("testResNet18FullModel() passed")
+
+
+def testViTFullModel():
+    model = SiameseNetwork(ViTEncoder(freeze=True), CropFusionMLP(input_dim=1152), SceneComparisonMLP(input_dim=896), encode_obj_with_JPM=True)
+    B=5
+    output = testFullModelHelper(model, B)
+    assert output.shape == torch.Size([B, 1])
+    print("testViTFullModel() passed")
 
 
 def testDatasetPrep():
-    train, val_seen, val_unseen, test_seen, test_unseen = load_and_split_dataset()
+    train, val_seen, val_unseen, test_seen, test_unseen = load_and_split_dataset(f"{WD}/output/results.json")
     for name, value in {"train": train, "val_seen": val_seen, "val_unseen": val_unseen, "test_seen": test_seen, "test_unseen": test_unseen}.items():
         positive = [t for t in value if t[3] == 1]
         negative = [t for t in value if t[3] == 0]
         assert len(positive) == len(negative)
         print(f"{name} samples: {len(value)} | positive: {len(positive)} | negative: {len(negative)}")
 
-    train_dataset = SceneObjectDataset(train)
+    train_dataset = SceneObjectDataset(train, f"{WD}/data/objects/full_crop", f"{WD}/bop_dataset/test")
     train_loader = DataLoader(train_dataset, batch_size=2, shuffle=True)
 
     # single batch
@@ -73,8 +95,10 @@ def testDatasetPrep():
 
 
 if __name__ == "__main__":
-    testEncoder()
+    testResNet18Encoder()
+    testViTEncoder()
     testCropFusion()
     testSceneComparison()
     testDatasetPrep()
-    testFullModel()
+    testResNet18FullModel()
+    testViTFullModel()

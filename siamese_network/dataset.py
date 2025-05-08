@@ -13,8 +13,8 @@ class SceneObjectDataset(Dataset):
     def __init__(
             self,
             samples: List[Tuple[str, str, str, int]],
-            crop_dir: str = "data/objects/full_crop",
-            scene_dir: str = "bop_dataset/test",
+            crop_dir: str,
+            scene_dir: str,
             image_size: int = 224
     ):
         self.samples = samples
@@ -64,7 +64,7 @@ class SceneObjectDataset(Dataset):
         return crop_tensors[0], crop_tensors[1], crop_tensors[2], scene_tensor, torch.tensor(label, dtype=torch.float32)
 
 def load_and_split_dataset(
-        results_path: str = "output/results.json",
+        results_path: str,
         seed: int = 42
 ) -> Tuple[List[Tuple[str, str, str, int]],
            List[Tuple[str, str, str, int]],

@@ -8,3 +8,4 @@ bop_dataset
 venv
 GoogleGeminiStartAt.py
 *.pth
+*/__pycache__/
