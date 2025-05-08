@@ -3,9 +3,9 @@ import random
 from pathlib import Path
 from collections import defaultdict
 
-LABELS_FILE = Path("data/labels.json")
-OBJECTS_DIR = Path("data/objects/hybrid_crop")
-OUTPUT_FILE = Path("output/results.json")
+LABELS_FILE = Path("../data/labels.json")
+OBJECTS_DIR = Path("../data/objects/hybrid_crop")
+OUTPUT_FILE = Path("../output/results.json")
 SEED = 42
 
 with open(LABELS_FILE, "r") as f:
